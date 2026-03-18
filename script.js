@@ -1,3 +1,5 @@
+
+
 // --- TYPE COLORS ---
 const TYPE_COLORS = {
   ocrDocument: "F2F2F2",
@@ -142,6 +144,8 @@ const fetchData = ({ api, method, payload = undefined, params = undefined, respo
   return getData(retry);
 };
 
+
+
 // --- FIND COMPONENTS ---
 function findAllComponents(componentArray, resultsList) {
   if (!Array.isArray(componentArray)) return;
@@ -222,6 +226,63 @@ async function getJsonForm(tab) {
   return cleanJsonInput(data.jsonForm);
 }
 
+async function getCodeJson(tab) {
+  // https://eform.sandbox.kytaplatform.com/services/eform/api/forms/000061bBIyIQWkVoodrFVXKM/code
+  const cookies = await chrome.cookies.getAll({ url: tab.url });
+  const TOKEN = cookies.find(c => c.name === 'access_token')?.value;
+
+  const AUTH_HEADERS = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${TOKEN}`
+  };
+  const id = parseEform(tab.url);
+
+  const res = await fetchData({
+    api: getHostApi(tab, 'eform', `api/forms/${id}/code`),
+    headers: AUTH_HEADERS,
+    method: 'GET',
+    responseType: 'text'
+  });
+
+  const data = JSON.parse(res);
+  return cleanJsonInput(data);
+}
+
+async function downloadAllFiles(json) {
+  for (const [filename, fileData] of Object.entries(json)) {
+    const code = fileData.code;
+    if (!code) continue;
+
+    const blob = new Blob([code], { type: 'text/javascript' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${filename}.js`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    // Small delay between downloads so browser doesn't block them
+    await new Promise(r => setTimeout(r, 300));
+  }
+}
+
+async function downloadAsZip(json, zipName = 'files.zip') {
+  const zip = new JSZip();
+
+  for (const [filename, fileData] of Object.entries(json)) {
+    const code = fileData.code;
+    if (!code) continue;
+    zip.file(`${filename}.js`, code);
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = zipName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+
 
 // --- LOAD XLSX ---
 function loadXLSX() {
@@ -294,12 +355,23 @@ async function exportToXLSX(formName, jsonForm) {
 // --- BUTTON ---
 document.addEventListener('DOMContentLoaded', () => {
 
-  document.getElementById('btn').addEventListener('click', async () => {
+  document.getElementById('btn-excel').addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     let jsonForm = await getJsonForm(tab)
 
-    await exportToXLSX("test", jsonForm)
+    await exportToXLSX("Form", jsonForm)
 
   });
+
+
+  document.getElementById('btn-code').addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    let codeJson = await getCodeJson(tab)
+    console.log(codeJson)
+    // await downloadAllFiles(codeJson);
+
+    await downloadAsZip(codeJson, 'my-files.zip');
+  });
+
 
 });

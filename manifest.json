@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Xuất excel eform",
+  "name": "eform utils",
   "version": "1.0",
   "description": "Does something useful",
   "permissions": [
